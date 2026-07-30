@@ -173,7 +173,7 @@ const DEFAULT_ITEMS = [
       let prices = [];
   
       if (source === "yahoo") {
-        // Parser dữ liệu Yahoo Finance JSON
+        // --- XỬ LÝ NGUỒN YAHOO FINANCE ---
         const result = response.data.chart?.result?.[0];
         if (!result) return;
   
@@ -185,28 +185,71 @@ const DEFAULT_ITEMS = [
         
         currentPrice = meta.regularMarketPrice || prices[prices.length - 1];
       } else {
-        // Parser dữ liệu DNSE
+        // --- XỬ LÝ NGUỒN DNSE (CHUẨN HÓA THEO MÚI GIỜ VIỆT NAM) ---
         const { t, c, o } = response.data;
         if (!t || !c || t.length === 0) return;
   
-        const now = new Date();
-        const startOfTodayTimestamp = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
-        let todayStartIndex = t.findIndex((time) => time >= startOfTodayTimestamp);
+        // 1. Lấy chuỗi Ngày hôm nay dạng YYYY-MM-DD theo giờ VN (UTC+7)
+        const options = { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' };
+        const todayStr = new Intl.DateTimeFormat('en-CA', options).format(new Date()); // Output: "2026-07-31"
   
-        if (todayStartIndex > 0) {
-          refPrice = c[todayStartIndex - 1];
-          prices = c.slice(todayStartIndex);
-        } else if (todayStartIndex === 0) {
-          refPrice = o[0];
-          prices = c;
+        // 2. Chuyển toàn bộ timestamp trong mảng `t` sang chuỗi YYYY-MM-DD tương ứng
+        const dateStrings = t.map(timestamp => {
+          return new Intl.DateTimeFormat('en-CA', options).format(new Date(timestamp * 1000));
+        });
+  
+        // 3. Tìm ngày gần nhất trong danh sách dữ liệu (Ngày mới nhất)
+        const latestDateStr = dateStrings[dateStrings.length - 1];
+  
+        if (latestDateStr === todayStr) {
+          // HÔM NAY ĐÃ CÓ PHIÊN GIAO DỊCH
+          const todayIndices = [];
+          const pastIndices = [];
+  
+          dateStrings.forEach((dStr, idx) => {
+            if (dStr === todayStr) {
+              todayIndices.push(idx);
+            } else {
+              pastIndices.push(idx);
+            }
+          });
+  
+          // Lấy danh sách giá hôm nay
+          prices = todayIndices.map(i => c[i]);
+          currentPrice = prices[prices.length - 1];
+  
+          if (pastIndices.length > 0) {
+            // Lấy giá đóng cửa nến CUỐI CÙNG của ngày hôm trước
+            refPrice = c[pastIndices[pastIndices.length - 1]];
+          } else {
+            refPrice = o[todayIndices[0]];
+          }
         } else {
-          refPrice = c[c.length - 2] || c[0];
-          prices = c;
+          // CHƯA CÓ PHIÊN HÔM NAY (Ví dụ: 6:00 - 8:00 sáng hoặc ngày nghỉ)
+          // Lấy toàn bộ nến của ngày giao dịch gần nhất (latestDateStr)
+          const latestDayIndices = [];
+          const previousDayIndices = [];
+  
+          dateStrings.forEach((dStr, idx) => {
+            if (dStr === latestDateStr) {
+              latestDayIndices.push(idx);
+            } else {
+              previousDayIndices.push(idx);
+            }
+          });
+  
+          prices = latestDayIndices.map(i => c[i]);
+          currentPrice = prices[prices.length - 1];
+  
+          if (previousDayIndices.length > 0) {
+            refPrice = c[previousDayIndices[previousDayIndices.length - 1]];
+          } else {
+            refPrice = o[latestDayIndices[0]];
+          }
         }
-        currentPrice = prices[prices.length - 1];
       }
   
-      // Tính toán chung
+      // --- TÍNH TOÁN ĐIỂM VÀ % TĂNG/GIẢM ---
       const change = currentPrice - refPrice;
       const changePercent = refPrice ? (change / refPrice) * 100 : 0;
   
@@ -219,7 +262,7 @@ const DEFAULT_ITEMS = [
         colorClass = "red";
       }
   
-      // Render DOM
+      // --- CẬP NHẬT GIAO DIỆN HTML ---
       const priceEl = document.getElementById(`price-${cardId}`);
       if (priceEl) {
         priceEl.textContent = currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -238,6 +281,7 @@ const DEFAULT_ITEMS = [
         percentEl.className = colorClass;
       }
   
+      // --- VẼ BIỂU ĐỒ SPARKLINE ---
       if (prices.length > 0) {
         drawSparkline(`canvas-${cardId}`, prices, colorClass === "red" ? "#ef5350" : "#26a69a");
       }
