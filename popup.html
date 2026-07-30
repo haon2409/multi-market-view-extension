@@ -12,14 +12,19 @@
       <option value="yahoo">Yahoo (US)</option>
     </select>
     <input type="text" id="symbol-input" placeholder="Mã (VN30, ^GSPC, AAPL...)" />
-    
-    <!-- Nút thêm sử dụng Icon SVG -->
-    <button id="add-btn" title="Thêm mã theo dõi">
+    <button id="add-btn" title="Thêm mã">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
     </button>
+  </div>
+
+  <!-- Thanh chọn Timeframe (1D / 1W / 1M) -->
+  <div class="timeframe-container">
+    <button class="tf-btn active" data-tf="1D">Ngày (1D)</button>
+    <button class="tf-btn" data-tf="1W">Tuần (1W)</button>
+    <button class="tf-btn" data-tf="1M">Tháng (1M)</button>
   </div>
 
   <!-- Container chứa danh sách các card -->
