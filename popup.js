@@ -128,6 +128,11 @@ function createSymbolCard(item, container) {
     deleteItem(sym, src);
   });
 
+  // Gắn sự kiện click mở web
+  card.querySelector(".symbol").addEventListener("click", () => {
+    openSymbolWebpage(symbol, source);
+  });
+
   addDragAndDropEvents(card, container);
 }
 
@@ -361,4 +366,25 @@ function drawSparkline(canvasId, prices, refPrice) {
   ctx.closePath();
   ctx.fillStyle = fillGradient;
   ctx.fill();
+}
+
+// Hàm tạo URL dựa theo nguồn và mã giao dịch
+function openSymbolWebpage(symbol, source) {
+  let url = "";
+  if (source === "yahoo") {
+    url = `https://finance.yahoo.com/quote/${symbol}`;
+  } else {
+    const symLower = symbol.toLowerCase();
+    // Xử lý riêng cho các chỉ số thị trường chung mở sang bảng giá niêm yết
+    if (["vn30", "hose", "hnx", "upcom"].includes(symLower)) {
+      url = `https://banggia.dnse.com.vn/v2/niem-yet/${symLower}`;
+    } else if (symLower === "vnindex") {
+      url = `https://banggia.dnse.com.vn/v2/niem-yet/hose`;
+    } else {
+      // Các mã cổ phiếu cụ thể mở trang tổng quan mã
+      url = `https://banggia.dnse.com.vn/tong-quan-ma/${symLower}`;
+    }
+  }
+  // Dùng chrome.tabs.create để mở tab mới an toàn trong Extension
+  chrome.tabs.create({ url: url });
 }

@@ -97,6 +97,12 @@ body {
 .symbol {
   font-size: 15px;
   font-weight: bold;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.symbol:hover {
+  color: #26a69a;
 }
 
 .badge {
