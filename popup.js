@@ -298,14 +298,13 @@ function fetchSymbolData(item, timeframe = "1D") {
       percentEl.className = colorClass;
     }
 
-    // --- VẼ BIỂU ĐỒ SPARKLINE ---
     if (prices.length > 0) {
-      drawSparkline(`canvas-${cardId}`, prices, colorClass === "red" ? "#ef5350" : "#26a69a");
+      drawSparkline(`canvas-${cardId}`, prices, refPrice);
     }
   });
 }
 
-function drawSparkline(canvasId, prices, color) {
+function drawSparkline(canvasId, prices, refPrice) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
@@ -319,12 +318,32 @@ function drawSparkline(canvasId, prices, color) {
 
   ctx.clearRect(0, 0, width, height);
 
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
+  // 1. Đưa giá tham chiếu vào để tính toán min/max, đảm bảo trục Y chuẩn xác
+  const min = Math.min(...prices, refPrice);
+  const max = Math.max(...prices, refPrice);
   const range = max - min || 1;
 
+  // 2. Tính toạ độ Y của giá tham chiếu và tỷ lệ % trên canvas
+  const baselineY = height - ((refPrice - min) / range) * (height - 6) - 3;
+  const stopPercent = Math.max(0, Math.min(1, baselineY / height));
+
+  // 3. Tạo Gradient cho đường Line (Cắt màu sắc nét tại đúng baseline)
+  const strokeGradient = ctx.createLinearGradient(0, 0, 0, height);
+  strokeGradient.addColorStop(0, "#26a69a"); // Xanh cho phần trên
+  strokeGradient.addColorStop(stopPercent, "#26a69a");
+  strokeGradient.addColorStop(stopPercent, "#ef5350"); // Đỏ cho phần dưới
+  strokeGradient.addColorStop(1, "#ef5350");
+
+  // 4. Tạo Gradient cho vùng Fill (Hiệu ứng mờ dần về baseline)
+  const fillGradient = ctx.createLinearGradient(0, 0, 0, height);
+  fillGradient.addColorStop(0, "rgba(38, 166, 154, 0.25)");
+  fillGradient.addColorStop(stopPercent, "rgba(38, 166, 154, 0)");
+  fillGradient.addColorStop(stopPercent, "rgba(239, 83, 80, 0)");
+  fillGradient.addColorStop(1, "rgba(239, 83, 80, 0.25)");
+
+  // 5. Vẽ đường
   ctx.beginPath();
-  ctx.strokeStyle = color;
+  ctx.strokeStyle = strokeGradient;
   ctx.lineWidth = 1.5;
 
   prices.forEach((price, index) => {
@@ -334,12 +353,12 @@ function drawSparkline(canvasId, prices, color) {
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
-
   ctx.stroke();
 
+  // 6. Đổ màu nền (Area)
   ctx.lineTo(width, height);
   ctx.lineTo(0, height);
   ctx.closePath();
-  ctx.fillStyle = color === "#ef5350" ? "rgba(239, 83, 80, 0.15)" : "rgba(38, 166, 154, 0.15)";
+  ctx.fillStyle = fillGradient;
   ctx.fill();
 }
