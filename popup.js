@@ -305,8 +305,23 @@ function fetchSymbolData(item, timeframe = "1D") {
 
     if (prices.length > 0) {
       let maxPoints = prices.length;
+
       if (timeframe === "1D") {
-        maxPoints = source === "yahoo" ? 195 : 271; // 195 nến (2m/nến) cho Yahoo, 271 nến (1m/nến) cho DNSE
+        // 1. Lấy giờ và phút theo múi giờ Việt Nam
+        const now = new Date();
+        const hourVN = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Ho_Chi_Minh', hour: 'numeric', hour12: false }).format(now));
+        const minVN = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Ho_Chi_Minh', minute: 'numeric' }).format(now));
+
+        // 2. Kiểm tra trạng thái đóng cửa thị trường (sau 14h45 hoặc trước 09h00)
+        const isMarketClosed = (hourVN > 14 || (hourVN === 14 && minVN >= 45) || hourVN < 9);
+
+        if (isMarketClosed) {
+          // Khi đã đóng cửa phiên, toàn bộ số nến nhận được chính là 100% chiều rộng Ox
+          maxPoints = prices.length; 
+        } else {
+          // Trong giờ giao dịch: DNSE thực tế khoảng 215 nến/phiên, Yahoo khoảng 195 nến/phiên
+          maxPoints = source === "yahoo" ? 195 : 215; 
+        }
       } else if (timeframe === "1W") {
         maxPoints = 5;
       } else if (timeframe === "1M") {
