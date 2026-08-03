@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") addItem();
   });
 
-  // Bắt sự kiện chuyển đổi 1D / 1W
+  // Bắt sự kiện chuyển đổi 1D / 1W / 1M
   document.querySelectorAll(".tf-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       document.querySelectorAll(".tf-btn").forEach((b) => b.classList.remove("active"));
@@ -220,20 +220,12 @@ function fetchSymbolData(item, timeframe = "1D") {
       if (timeframe === "1M") {
         // --- KHUNG THÁNG (1M) ---
         currentPrice = c[c.length - 1];
-
-        // 1. Giá tham chiếu = Giá đóng cửa trước đó khoảng 21 phiên giao dịch (~1 tháng)
         refPrice = c.length > 21 ? c[c.length - 22] : c[0];
-
-        // 2. Lấy 21 nến gần nhất đại diện cho 1 tháng để vẽ Sparkline
         prices = c.slice(-21);
       } else if (timeframe === "1W") {
         // --- KHUNG TUẦN (1W) ---
         currentPrice = c[c.length - 1];
-
-        // Giá tham chiếu = Giá đóng cửa của phiên Thứ 6 tuần trước (lùi 5 phiên)
         refPrice = c.length > 5 ? c[c.length - 6] : c[0];
-
-        // Lấy 5 nến gần nhất của tuần này để vẽ Sparkline
         prices = c.slice(-5);
       } else {
         // --- KHUNG NGÀY (1D) ---
@@ -307,27 +299,23 @@ function fetchSymbolData(item, timeframe = "1D") {
       let maxPoints = prices.length;
 
       if (timeframe === "1D") {
-        // 1. Lấy giờ và phút theo múi giờ Việt Nam
         const now = new Date();
         const hourVN = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Ho_Chi_Minh', hour: 'numeric', hour12: false }).format(now));
         const minVN = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Ho_Chi_Minh', minute: 'numeric' }).format(now));
 
-        // 2. Kiểm tra trạng thái đóng cửa thị trường (sau 14h45 hoặc trước 09h00)
         const isMarketClosed = (hourVN > 14 || (hourVN === 14 && minVN >= 45) || hourVN < 9);
 
         if (isMarketClosed) {
-          // Khi đã đóng cửa phiên, toàn bộ số nến nhận được chính là 100% chiều rộng Ox
-          maxPoints = prices.length; 
+          maxPoints = prices.length;
         } else {
-          // Trong giờ giao dịch: DNSE thực tế khoảng 215 nến/phiên, Yahoo khoảng 195 nến/phiên
-          maxPoints = source === "yahoo" ? 195 : 215; 
+          maxPoints = source === "yahoo" ? 195 : 215;
         }
       } else if (timeframe === "1W") {
         maxPoints = 5;
       } else if (timeframe === "1M") {
         maxPoints = 21;
       }
-      
+
       drawSparkline(`canvas-${cardId}`, prices, refPrice, maxPoints);
     }
   });
@@ -347,43 +335,37 @@ function drawSparkline(canvasId, prices, refPrice, maxPoints = 0) {
 
   ctx.clearRect(0, 0, width, height);
 
-  // 1. Đưa giá tham chiếu vào để tính toán min/max
   const min = Math.min(...prices, refPrice);
   const max = Math.max(...prices, refPrice);
   const range = max - min || 1;
 
-  // 2. Tính toạ độ Y của giá tham chiếu và tỷ lệ % trên canvas
   const baselineY = height - ((refPrice - min) / range) * (height - 6) - 3;
   const stopPercent = Math.max(0, Math.min(1, baselineY / height));
 
-  // 3. VẼ ĐƯỜNG TRỤC THAM CHIẾU (BASELINE) DÀI 100% CHIỀU RỘNG
+  // Đường tham chiếu nét đứt dài 100%
   ctx.beginPath();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"; // Màu mờ đại diện cho toàn bộ thời gian phiên
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
   ctx.lineWidth = 1;
-  ctx.setLineDash([2, 2]); // Nét đứt nhẹ
+  ctx.setLineDash([2, 2]);
   ctx.moveTo(0, baselineY);
   ctx.lineTo(width, baselineY);
   ctx.stroke();
-  ctx.setLineDash([]); // Reset nét liền cho đường biểu đồ
+  ctx.setLineDash([]);
 
-  // 4. Tạo Gradient cho đường Line
   const strokeGradient = ctx.createLinearGradient(0, 0, 0, height);
   strokeGradient.addColorStop(0, "#26a69a"); 
   strokeGradient.addColorStop(stopPercent, "#26a69a");
   strokeGradient.addColorStop(stopPercent, "#ef5350"); 
   strokeGradient.addColorStop(1, "#ef5350");
 
-  // 5. Tạo Gradient cho vùng Fill
   const fillGradient = ctx.createLinearGradient(0, 0, 0, height);
   fillGradient.addColorStop(0, "rgba(38, 166, 154, 0.25)");
   fillGradient.addColorStop(stopPercent, "rgba(38, 166, 154, 0)");
   fillGradient.addColorStop(stopPercent, "rgba(239, 83, 80, 0)");
   fillGradient.addColorStop(1, "rgba(239, 83, 80, 0.25)");
 
-  // 6. Mẫu số tính trục X
   const denominator = Math.max(prices.length - 1, maxPoints - 1, 1);
 
-  // 7. Vẽ đường biểu đồ giá (chỉ chạy đến điểm dữ liệu hiện tại)
   ctx.beginPath();
   ctx.strokeStyle = strokeGradient;
   ctx.lineWidth = 1.5;
@@ -397,7 +379,6 @@ function drawSparkline(canvasId, prices, refPrice, maxPoints = 0) {
   });
   ctx.stroke();
 
-  // 8. Đổ màu nền (Area) dừng tại điểm cuối cùng
   const lastX = ((prices.length - 1) / denominator) * width;
   ctx.lineTo(lastX, height);
   ctx.lineTo(0, height);
@@ -414,16 +395,13 @@ function openSymbolWebpage(symbol, source) {
     url = `https://finance.yahoo.com/quote/${symbol}`;
   } else {
     const symLower = symbol.toLowerCase();
-    // Xử lý riêng cho các chỉ số thị trường chung mở sang bảng giá niêm yết
     if (["vn30", "hose", "hnx", "upcom"].includes(symLower)) {
       url = `https://banggia.dnse.com.vn/v2/niem-yet/${symLower}`;
     } else if (symLower === "vnindex") {
       url = `https://banggia.dnse.com.vn/v2/niem-yet/hose`;
     } else {
-      // Các mã cổ phiếu cụ thể mở trang tổng quan mã
       url = `https://banggia.dnse.com.vn/tong-quan-ma/${symLower}`;
     }
   }
-  // Dùng chrome.tabs.create để mở tab mới an toàn trong Extension
   chrome.tabs.create({ url: url });
 }
