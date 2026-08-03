@@ -304,12 +304,21 @@ function fetchSymbolData(item, timeframe = "1D") {
     }
 
     if (prices.length > 0) {
-      drawSparkline(`canvas-${cardId}`, prices, refPrice);
+      let maxPoints = prices.length;
+      if (timeframe === "1D") {
+        maxPoints = source === "yahoo" ? 195 : 271; // 195 nến (2m/nến) cho Yahoo, 271 nến (1m/nến) cho DNSE
+      } else if (timeframe === "1W") {
+        maxPoints = 5;
+      } else if (timeframe === "1M") {
+        maxPoints = 21;
+      }
+      
+      drawSparkline(`canvas-${cardId}`, prices, refPrice, maxPoints);
     }
   });
 }
 
-function drawSparkline(canvasId, prices, refPrice) {
+function drawSparkline(canvasId, prices, refPrice, maxPoints = 0) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
@@ -323,7 +332,7 @@ function drawSparkline(canvasId, prices, refPrice) {
 
   ctx.clearRect(0, 0, width, height);
 
-  // 1. Đưa giá tham chiếu vào để tính toán min/max, đảm bảo trục Y chuẩn xác
+  // 1. Đưa giá tham chiếu vào để tính toán min/max
   const min = Math.min(...prices, refPrice);
   const max = Math.max(...prices, refPrice);
   const range = max - min || 1;
@@ -332,27 +341,40 @@ function drawSparkline(canvasId, prices, refPrice) {
   const baselineY = height - ((refPrice - min) / range) * (height - 6) - 3;
   const stopPercent = Math.max(0, Math.min(1, baselineY / height));
 
-  // 3. Tạo Gradient cho đường Line (Cắt màu sắc nét tại đúng baseline)
+  // 3. VẼ ĐƯỜNG TRỤC THAM CHIẾU (BASELINE) DÀI 100% CHIỀU RỘNG
+  ctx.beginPath();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"; // Màu mờ đại diện cho toàn bộ thời gian phiên
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 2]); // Nét đứt nhẹ
+  ctx.moveTo(0, baselineY);
+  ctx.lineTo(width, baselineY);
+  ctx.stroke();
+  ctx.setLineDash([]); // Reset nét liền cho đường biểu đồ
+
+  // 4. Tạo Gradient cho đường Line
   const strokeGradient = ctx.createLinearGradient(0, 0, 0, height);
-  strokeGradient.addColorStop(0, "#26a69a"); // Xanh cho phần trên
+  strokeGradient.addColorStop(0, "#26a69a"); 
   strokeGradient.addColorStop(stopPercent, "#26a69a");
-  strokeGradient.addColorStop(stopPercent, "#ef5350"); // Đỏ cho phần dưới
+  strokeGradient.addColorStop(stopPercent, "#ef5350"); 
   strokeGradient.addColorStop(1, "#ef5350");
 
-  // 4. Tạo Gradient cho vùng Fill (Hiệu ứng mờ dần về baseline)
+  // 5. Tạo Gradient cho vùng Fill
   const fillGradient = ctx.createLinearGradient(0, 0, 0, height);
   fillGradient.addColorStop(0, "rgba(38, 166, 154, 0.25)");
   fillGradient.addColorStop(stopPercent, "rgba(38, 166, 154, 0)");
   fillGradient.addColorStop(stopPercent, "rgba(239, 83, 80, 0)");
   fillGradient.addColorStop(1, "rgba(239, 83, 80, 0.25)");
 
-  // 5. Vẽ đường
+  // 6. Mẫu số tính trục X
+  const denominator = Math.max(prices.length - 1, maxPoints - 1, 1);
+
+  // 7. Vẽ đường biểu đồ giá (chỉ chạy đến điểm dữ liệu hiện tại)
   ctx.beginPath();
   ctx.strokeStyle = strokeGradient;
   ctx.lineWidth = 1.5;
 
   prices.forEach((price, index) => {
-    const x = prices.length === 1 ? width : (index / (prices.length - 1)) * width;
+    const x = (index / denominator) * width;
     const y = height - ((price - min) / range) * (height - 6) - 3;
 
     if (index === 0) ctx.moveTo(x, y);
@@ -360,9 +382,11 @@ function drawSparkline(canvasId, prices, refPrice) {
   });
   ctx.stroke();
 
-  // 6. Đổ màu nền (Area)
-  ctx.lineTo(width, height);
+  // 8. Đổ màu nền (Area) dừng tại điểm cuối cùng
+  const lastX = ((prices.length - 1) / denominator) * width;
+  ctx.lineTo(lastX, height);
   ctx.lineTo(0, height);
+  
   ctx.closePath();
   ctx.fillStyle = fillGradient;
   ctx.fill();
