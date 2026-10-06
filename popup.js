@@ -216,7 +216,7 @@ function fetchSymbolData(item, timeframe = "1D") {
     let currentPrice = 0;
     let refPrice = 0;
     let prices = [];
-    let volumeList = null; // chỉ dùng DNSE + 1D
+    let volumeList = null; // chỉ DNSE + 1D
 
     if (source === "yahoo") {
       const result = response.data.chart?.result?.[0];
@@ -249,12 +249,10 @@ function fetchSymbolData(item, timeframe = "1D") {
         currentPrice = c[c.length - 1];
         refPrice = c.length > 21 ? c[c.length - 22] : c[0];
         prices = c.slice(-21);
-        // 1M: không hiện Vol
       } else if (timeframe === "1W") {
         currentPrice = c[c.length - 1];
         refPrice = c.length > 5 ? c[c.length - 6] : c[0];
         prices = c.slice(-5);
-        // 1W: không hiện Vol
       } else {
         // --- 1D: giá + 3 vol gần nhất ---
         const options = {
@@ -269,7 +267,6 @@ function fetchSymbolData(item, timeframe = "1D") {
         );
         const latestDateStr = dateStrings[dateStrings.length - 1];
 
-        // 3 phiên volume gần nhất (cũ → mới)
         const dailyVols = aggregateVolumeByDay(t, volumes);
         volumeList = dailyVols.slice(-3).map((d) => d.volume);
 
@@ -338,14 +335,23 @@ function fetchSymbolData(item, timeframe = "1D") {
       percentEl.className = colorClass;
     }
 
-    // Vol: chỉ DNSE + 1D
+    // Vol: chỉ DNSE + 1D — so sánh màu tăng/giảm
     const volEl = document.getElementById(`vol-${cardId}`);
     if (volEl) {
       if (source === "dnse" && timeframe === "1D" && volumeList && volumeList.length > 0) {
-        volEl.textContent = "Vol: " + volumeList.map(formatVolume).join(" | ");
+        const parts = volumeList.map((vol, idx) => {
+          const text = formatVolume(vol);
+          if (idx === 0) {
+            return `<span class="vol-item">${text}</span>`;
+          }
+          const prev = volumeList[idx - 1];
+          const cls = vol > prev ? "vol-up" : vol < prev ? "vol-down" : "vol-item";
+          return `<span class="${cls}">${text}</span>`;
+        });
+        volEl.innerHTML = "Vol: " + parts.join(' <span class="vol-sep">|</span> ');
         volEl.style.display = "block";
       } else {
-        volEl.textContent = "";
+        volEl.innerHTML = "";
         volEl.style.display = "none";
       }
     }

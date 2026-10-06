@@ -4,7 +4,7 @@ body {
   background-color: #121212;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #ffffff;
-  width: 340px; /* trước: 290px */
+  width: 340px;
 }
 
 .input-container {
@@ -155,12 +155,15 @@ body {
   justify-content: space-between;
   align-items: flex-end;
   margin-top: 6px;
+  gap: 8px;
 }
 
 .price-block {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .price {
@@ -173,7 +176,25 @@ body {
   color: #888;
   font-weight: 500;
   letter-spacing: 0.2px;
-  white-space: nowrap; /* hiện đủ 3 vol, không cắt */
+  white-space: nowrap;
+}
+
+.vol-item {
+  color: #888;
+}
+
+.vol-sep {
+  color: #555;
+}
+
+.vol-up {
+  color: #26a69a;
+  font-weight: 600;
+}
+
+.vol-down {
+  color: #ef5350;
+  font-weight: 600;
 }
 
 .green {
@@ -189,6 +210,7 @@ body {
 .chart-container {
   width: 90px;
   height: 32px;
+  flex-shrink: 0;
 }
 
 .timeframe-container {
