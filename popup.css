@@ -4,7 +4,7 @@ body {
   background-color: #121212;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #ffffff;
-  width: 290px;
+  width: 340px; /* trước: 290px */
 }
 
 .input-container {
@@ -72,8 +72,13 @@ body {
   border: 1px solid transparent;
 }
 
-.card.dragging { opacity: 0.4; border: 1px dashed #26a69a; }
-.card.drag-over { border-top: 2px solid #26a69a; }
+.card.dragging {
+  opacity: 0.4;
+  border: 1px dashed #26a69a;
+}
+.card.drag-over {
+  border-top: 2px solid #26a69a;
+}
 
 .header {
   display: flex;
@@ -115,8 +120,14 @@ body {
   color: #888;
 }
 
-.badge.dnse { color: #26a69a; background: rgba(38, 166, 154, 0.15); }
-.badge.yahoo { color: #ab47bc; background: rgba(171, 71, 188, 0.15); }
+.badge.dnse {
+  color: #26a69a;
+  background: rgba(38, 166, 154, 0.15);
+}
+.badge.yahoo {
+  color: #ab47bc;
+  background: rgba(171, 71, 188, 0.15);
+}
 
 .delete-btn {
   background: transparent;
@@ -127,7 +138,9 @@ body {
   padding: 0 2px;
 }
 
-.delete-btn:hover { color: #ef5350; }
+.delete-btn:hover {
+  color: #ef5350;
+}
 
 .changes {
   display: flex;
@@ -144,14 +157,34 @@ body {
   margin-top: 6px;
 }
 
+.price-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .price {
   font-size: 19px;
   font-weight: bold;
 }
 
-.green { color: #26a69a; }
-.red { color: #ef5350; }
-.yellow { color: #f2a900; }
+.volume {
+  font-size: 10px;
+  color: #888;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  white-space: nowrap; /* hiện đủ 3 vol, không cắt */
+}
+
+.green {
+  color: #26a69a;
+}
+.red {
+  color: #ef5350;
+}
+.yellow {
+  color: #f2a900;
+}
 
 .chart-container {
   width: 90px;

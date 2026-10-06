@@ -14,7 +14,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") addItem();
   });
 
-  // Bắt sự kiện chuyển đổi 1D / 1W / 1M
   document.querySelectorAll(".tf-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       document.querySelectorAll(".tf-btn").forEach((b) => b.classList.remove("active"));
@@ -46,7 +45,7 @@ function loadAndRenderSymbols() {
 function addItem() {
   const input = document.getElementById("symbol-input");
   const sourceSelect = document.getElementById("source-select");
-  
+
   const symbol = input.value.trim().toUpperCase();
   const source = sourceSelect.value;
 
@@ -54,7 +53,7 @@ function addItem() {
 
   chrome.storage.local.get(["watchedItems"], (result) => {
     let items = result.watchedItems || DEFAULT_ITEMS;
-    const exists = items.some(i => i.symbol === symbol && i.source === source);
+    const exists = items.some((i) => i.symbol === symbol && i.source === source);
 
     if (!exists) {
       items.push({ symbol, source });
@@ -84,13 +83,13 @@ function saveNewOrder() {
     symbol: card.getAttribute("data-symbol"),
     source: card.getAttribute("data-source")
   }));
-  
+
   chrome.storage.local.set({ watchedItems: newItemsOrder });
 }
 
 function createSymbolCard(item, container) {
   const { symbol, source } = item;
-  const cardId = `card-${source}-${symbol.replace('^', '')}`;
+  const cardId = `card-${source}-${symbol.replace("^", "")}`;
 
   const card = document.createElement("div");
   card.className = "card";
@@ -113,7 +112,10 @@ function createSymbolCard(item, container) {
       </div>
     </div>
     <div class="footer">
-      <div id="price-${cardId}" class="price yellow">0.00</div>
+      <div class="price-block">
+        <div id="price-${cardId}" class="price yellow">0.00</div>
+        <div id="vol-${cardId}" class="volume" style="display:none">Vol: --</div>
+      </div>
       <div class="chart-container">
         <canvas id="canvas-${cardId}" width="90" height="32"></canvas>
       </div>
@@ -128,7 +130,6 @@ function createSymbolCard(item, container) {
     deleteItem(sym, src);
   });
 
-  // Gắn sự kiện click mở web
   card.querySelector(".symbol").addEventListener("click", () => {
     openSymbolWebpage(symbol, source);
   });
@@ -177,9 +178,37 @@ function addDragAndDropEvents(card, container) {
   });
 }
 
+function formatVolume(v) {
+  if (v == null || isNaN(v)) return "--";
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + "B";
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+  return v.toLocaleString("en-US");
+}
+
+/** Gom volume theo ngày giao dịch (VN timezone), trả mảng tăng dần theo ngày */
+function aggregateVolumeByDay(timestamps, volumes) {
+  const options = {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  };
+  const map = new Map();
+
+  timestamps.forEach((ts, i) => {
+    const dateStr = new Intl.DateTimeFormat("en-CA", options).format(new Date(ts * 1000));
+    map.set(dateStr, (map.get(dateStr) || 0) + (volumes[i] || 0));
+  });
+
+  return Array.from(map.entries())
+    .map(([date, volume]) => ({ date, volume }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function fetchSymbolData(item, timeframe = "1D") {
   const { symbol, source } = item;
-  const cardId = `card-${source}-${symbol.replace('^', '')}`;
+  const cardId = `card-${source}-${symbol.replace("^", "")}`;
 
   chrome.runtime.sendMessage({ action: "FETCH_OHLC", symbol, source, timeframe }, (response) => {
     if (!response || !response.success || !response.data) return;
@@ -187,83 +216,94 @@ function fetchSymbolData(item, timeframe = "1D") {
     let currentPrice = 0;
     let refPrice = 0;
     let prices = [];
+    let volumeList = null; // chỉ dùng DNSE + 1D
 
     if (source === "yahoo") {
-      // --- XỬ LÝ NGUỒN YAHOO FINANCE ---
       const result = response.data.chart?.result?.[0];
       if (!result) return;
 
       const meta = result.meta;
       const rawPrices = result.indicators?.quote?.[0]?.close || [];
-      const validPrices = rawPrices.filter(p => p !== null && p !== undefined);
+      const validPrices = rawPrices.filter((p) => p !== null && p !== undefined);
 
       currentPrice = meta.regularMarketPrice || validPrices[validPrices.length - 1];
 
       if (timeframe === "1M") {
-        // Tháng: Lấy 21 nến ngày gần nhất (~1 tháng giao dịch)
         prices = validPrices.slice(-21);
         refPrice = validPrices.length >= 22 ? validPrices[validPrices.length - 22] : validPrices[0];
       } else if (timeframe === "1W") {
-        // Tuần: Lấy 5 nến ngày gần nhất
         prices = validPrices.slice(-5);
         refPrice = validPrices.length >= 6 ? validPrices[validPrices.length - 6] : validPrices[0];
       } else {
-        // Ngày: Lấy nến trong ngày
         prices = validPrices;
         refPrice = meta.chartPreviousClose || meta.previousClose;
       }
     } else {
-      // --- XỬ LÝ NGUỒN DNSE ---
-      const { t, c, o } = response.data;
+      // --- DNSE ---
+      const { t, c, o, v } = response.data;
       if (!t || !c || t.length === 0) return;
 
+      const volumes = v || [];
+
       if (timeframe === "1M") {
-        // --- KHUNG THÁNG (1M) ---
         currentPrice = c[c.length - 1];
         refPrice = c.length > 21 ? c[c.length - 22] : c[0];
         prices = c.slice(-21);
+        // 1M: không hiện Vol
       } else if (timeframe === "1W") {
-        // --- KHUNG TUẦN (1W) ---
         currentPrice = c[c.length - 1];
         refPrice = c.length > 5 ? c[c.length - 6] : c[0];
         prices = c.slice(-5);
+        // 1W: không hiện Vol
       } else {
-        // --- KHUNG NGÀY (1D) ---
-        const options = { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' };
-        const todayStr = new Intl.DateTimeFormat('en-CA', options).format(new Date());
-
-        const dateStrings = t.map(ts => new Intl.DateTimeFormat('en-CA', options).format(new Date(ts * 1000)));
+        // --- 1D: giá + 3 vol gần nhất ---
+        const options = {
+          timeZone: "Asia/Ho_Chi_Minh",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        };
+        const todayStr = new Intl.DateTimeFormat("en-CA", options).format(new Date());
+        const dateStrings = t.map((ts) =>
+          new Intl.DateTimeFormat("en-CA", options).format(new Date(ts * 1000))
+        );
         const latestDateStr = dateStrings[dateStrings.length - 1];
+
+        // 3 phiên volume gần nhất (cũ → mới)
+        const dailyVols = aggregateVolumeByDay(t, volumes);
+        volumeList = dailyVols.slice(-3).map((d) => d.volume);
 
         if (latestDateStr === todayStr) {
           const todayIndices = [];
           const pastIndices = [];
-
           dateStrings.forEach((dStr, idx) => {
             if (dStr === todayStr) todayIndices.push(idx);
             else pastIndices.push(idx);
           });
-
-          prices = todayIndices.map(i => c[i]);
+          prices = todayIndices.map((i) => c[i]);
           currentPrice = prices[prices.length - 1];
-          refPrice = pastIndices.length > 0 ? c[pastIndices[pastIndices.length - 1]] : o[todayIndices[0]];
+          refPrice =
+            pastIndices.length > 0
+              ? c[pastIndices[pastIndices.length - 1]]
+              : o[todayIndices[0]];
         } else {
           const latestDayIndices = [];
           const previousDayIndices = [];
-
           dateStrings.forEach((dStr, idx) => {
             if (dStr === latestDateStr) latestDayIndices.push(idx);
             else previousDayIndices.push(idx);
           });
-
-          prices = latestDayIndices.map(i => c[i]);
+          prices = latestDayIndices.map((i) => c[i]);
           currentPrice = prices[prices.length - 1];
-          refPrice = previousDayIndices.length > 0 ? c[previousDayIndices[previousDayIndices.length - 1]] : o[latestDayIndices[0]];
+          refPrice =
+            previousDayIndices.length > 0
+              ? c[previousDayIndices[previousDayIndices.length - 1]]
+              : o[latestDayIndices[0]];
         }
       }
     }
 
-    // --- TÍNH TOÁN ĐIỂM VÀ % TĂNG/GIẢM ---
+    // --- Tính điểm / % ---
     const change = currentPrice - refPrice;
     const changePercent = refPrice ? (change / refPrice) * 100 : 0;
 
@@ -276,10 +316,13 @@ function fetchSymbolData(item, timeframe = "1D") {
       colorClass = "red";
     }
 
-    // --- CẬP NHẬT GIAO DIỆN HTML ---
+    // --- Cập nhật UI ---
     const priceEl = document.getElementById(`price-${cardId}`);
     if (priceEl) {
-      priceEl.textContent = currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      priceEl.textContent = currentPrice.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
       priceEl.className = `price ${colorClass}`;
     }
 
@@ -295,15 +338,38 @@ function fetchSymbolData(item, timeframe = "1D") {
       percentEl.className = colorClass;
     }
 
+    // Vol: chỉ DNSE + 1D
+    const volEl = document.getElementById(`vol-${cardId}`);
+    if (volEl) {
+      if (source === "dnse" && timeframe === "1D" && volumeList && volumeList.length > 0) {
+        volEl.textContent = "Vol: " + volumeList.map(formatVolume).join(" | ");
+        volEl.style.display = "block";
+      } else {
+        volEl.textContent = "";
+        volEl.style.display = "none";
+      }
+    }
+
     if (prices.length > 0) {
       let maxPoints = prices.length;
 
       if (timeframe === "1D") {
         const now = new Date();
-        const hourVN = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Ho_Chi_Minh', hour: 'numeric', hour12: false }).format(now));
-        const minVN = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Ho_Chi_Minh', minute: 'numeric' }).format(now));
-
-        const isMarketClosed = (hourVN > 14 || (hourVN === 14 && minVN >= 45) || hourVN < 9);
+        const hourVN = parseInt(
+          new Intl.DateTimeFormat("en-US", {
+            timeZone: "Asia/Ho_Chi_Minh",
+            hour: "numeric",
+            hour12: false
+          }).format(now)
+        );
+        const minVN = parseInt(
+          new Intl.DateTimeFormat("en-US", {
+            timeZone: "Asia/Ho_Chi_Minh",
+            minute: "numeric"
+          }).format(now)
+        );
+        const isMarketClosed =
+          hourVN > 14 || (hourVN === 14 && minVN >= 45) || hourVN < 9;
 
         if (isMarketClosed) {
           maxPoints = prices.length;
@@ -342,7 +408,6 @@ function drawSparkline(canvasId, prices, refPrice, maxPoints = 0) {
   const baselineY = height - ((refPrice - min) / range) * (height - 6) - 3;
   const stopPercent = Math.max(0, Math.min(1, baselineY / height));
 
-  // Đường tham chiếu nét đứt dài 100%
   ctx.beginPath();
   ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
   ctx.lineWidth = 1;
@@ -353,9 +418,9 @@ function drawSparkline(canvasId, prices, refPrice, maxPoints = 0) {
   ctx.setLineDash([]);
 
   const strokeGradient = ctx.createLinearGradient(0, 0, 0, height);
-  strokeGradient.addColorStop(0, "#26a69a"); 
+  strokeGradient.addColorStop(0, "#26a69a");
   strokeGradient.addColorStop(stopPercent, "#26a69a");
-  strokeGradient.addColorStop(stopPercent, "#ef5350"); 
+  strokeGradient.addColorStop(stopPercent, "#ef5350");
   strokeGradient.addColorStop(1, "#ef5350");
 
   const fillGradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -373,7 +438,6 @@ function drawSparkline(canvasId, prices, refPrice, maxPoints = 0) {
   prices.forEach((price, index) => {
     const x = (index / denominator) * width;
     const y = height - ((price - min) / range) * (height - 6) - 3;
-
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -382,13 +446,11 @@ function drawSparkline(canvasId, prices, refPrice, maxPoints = 0) {
   const lastX = ((prices.length - 1) / denominator) * width;
   ctx.lineTo(lastX, height);
   ctx.lineTo(0, height);
-  
   ctx.closePath();
   ctx.fillStyle = fillGradient;
   ctx.fill();
 }
 
-// Hàm tạo URL dựa theo nguồn và mã giao dịch
 function openSymbolWebpage(symbol, source) {
   let url = "";
   if (source === "yahoo") {
@@ -403,5 +465,5 @@ function openSymbolWebpage(symbol, source) {
       url = `https://banggia.dnse.com.vn/tong-quan-ma/${symLower}`;
     }
   }
-  chrome.tabs.create({ url: url });
+  chrome.tabs.create({ url });
 }
